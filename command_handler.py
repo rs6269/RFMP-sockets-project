@@ -31,6 +31,34 @@ def execute_prompt_command(command, args):
             old_name, new_name = args.split(" ", 1)
             os.rename(old_name, new_name)
             return ("SC", "Renamed '%s' to '%s'" % (old_name, new_name))
+            
+        elif command == "dir":
+            items = os.listdir(".")
+            return ("SC", "\n".join(items))
+
+        elif command == "pwd":
+            return ("SC", os.getcwd())
+
+        elif command == "move":
+            old_name, new_name = args.split(" ", 1)
+            os.rename(old_name, new_name)
+            return ("SC", "File moved")
+
+        elif command == "type":
+            f = open(args, "rt", encoding="utf-8")
+            contents = f.read()
+            f.close()
+            return ("SC", contents)
+
+        elif command == "copy":
+            src_name, dst_name = args.split(" ", 1)
+            f = open(src_name, "rt", encoding="utf-8")
+            contents = f.read()
+            f.close()
+            f = open(dst_name, "wt", encoding="utf-8")
+            f.write(contents)
+            f.close()
+            return ("SC", "File copied")
 
         else:
             return ("EE", "E01", "Unknown command: %s" % command)
