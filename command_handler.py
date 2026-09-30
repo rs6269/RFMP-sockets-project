@@ -71,19 +71,39 @@ def execute_prompt_command(command, args):
 
 def open_read(filename):
     """This will open a file and returns its contents."""
-    pass
+    try:
+        f = open(filename, "rt", encoding="utf-8")
+        contents = f.read()
+        f.close()
+        return ("SC", contents)
+    except FileNotFoundError:
+        return ("EE", "E02", "File not found: %s" % filename)
+    except OSError as e:
+        return ("EE", "E04", str(e))
 
 
 def open_write(filename):
     """Will open a file for writing and returns the file handle."""
-    pass
+    try:
+        file_handle = open(filename, "wt", encoding="utf-8")
+        return ("SC", file_handle)
+    except OSError as e:
+        return ("EE", "E04", str(e))
 
 
 def write_data(file_handle, text):
     """will writes incoming data to an already open file."""
-    pass
+    try:
+        file_handle.write(text)
+        return ("SC", "Data written")
+    except OSError as e:
+        return ("EE", "E04", str(e))
 
 
 def close_file(file_handle):
     """Closes a file that was opened for writing."""
-    pass
+    try:
+        file_handle.close()
+        return ("SC", "File closed")
+    except OSError as e:
+        return ("EE", "E04", str(e))
