@@ -1,3 +1,4 @@
+#CAESAR CIPHER
 def caesar_encrypt(text: str, shift: int) -> str:
     """Encrypts text using a Caesar cipher shift. Only shifts letters, leaves other chars untouched."""
     result = []
@@ -76,4 +77,53 @@ if __name__ == "__main__":
     print(f"Encrypted:  {encrypted}")
     print(f"Decrypted:  {decrypted}")
     assert decrypted == original, "Round trip failed!"
+    print("Round trip OK ✅")
+
+#RSA
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+import base64
+
+
+def generate_rsa_keypair():
+    """Generates an RSA keypair. Returns (public_key_pem, private_key_pem) as strings,
+    so they can be sent over the socket as plain text inside packets."""
+    key = RSA.generate(2048)
+    private_key_pem = key.export_key().decode('utf-8')
+    public_key_pem = key.publickey().export_key().decode('utf-8')
+    return public_key_pem, private_key_pem
+
+
+def rsa_encrypt_session_key(session_key: bytes, public_key_pem: str) -> str:
+    """Encrypts the AES session key using the recipient's RSA public key.
+    Returns a base64 string so it can be embedded in a text packet."""
+    public_key = RSA.import_key(public_key_pem)
+    cipher = PKCS1_OAEP.new(public_key)
+    encrypted = cipher.encrypt(session_key)
+    return base64.b64encode(encrypted).decode('utf-8')
+
+
+def rsa_decrypt_session_key(encrypted_session_key: str, private_key_pem: str) -> bytes:
+    """Decrypts the session key using our own RSA private key."""
+    private_key = RSA.import_key(private_key_pem)
+    cipher = PKCS1_OAEP.new(private_key)
+    encrypted_bytes = base64.b64decode(encrypted_session_key)
+    decrypted = cipher.decrypt(encrypted_bytes)
+    return decrypted
+
+
+if __name__ == "__main__":
+    # quick manual test — simulating the server generating a keypair, the client
+    # encrypting a session key with the server's public key, and the server
+    # decrypting it back with its private key
+    server_public, server_private = generate_rsa_keypair()
+    session_key = generate_aes_key()  # reusing the function already in this file
+
+    encrypted_key = rsa_encrypt_session_key(session_key, server_public)
+    decrypted_key = rsa_decrypt_session_key(encrypted_key, server_private)
+
+    print(f"Original session key (hex):    {session_key.hex()}")
+    print(f"Encrypted (base64, truncated): {encrypted_key[:50]}...")
+    print(f"Decrypted session key (hex):   {decrypted_key.hex()}")
+    assert decrypted_key == session_key, "Round trip failed!"
     print("Round trip OK ✅")
