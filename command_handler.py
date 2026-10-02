@@ -65,9 +65,10 @@ def execute_prompt_command(command, args):
 
     except FileNotFoundError:
         return ("EE", "E02", "Not found: %s" % args)
-    except OSError as e:
-        return ("EE", "E04", str(e))
-
+    except FileExistsError:
+        return ("EE", "E03", "Already exists: %s" % args)
+    except:
+        return ("EE", "E04", "Command failed: %s" % command)
 
 def open_read(filename):
     """This will open a file and returns its contents."""
