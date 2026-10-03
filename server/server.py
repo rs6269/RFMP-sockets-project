@@ -21,7 +21,8 @@ BUFFER = 1024 * 1024    # max bytes read per packet
 def send(conn, packet):
     """Send one packet (a string) to the client."""
     print("TX ->", packet[:80])
-    conn.sendall(packet.encode("utf-8"))
+    # Add a newline so the C client knows the packet is finished
+    conn.sendall((packet + "\n").encode("utf-8"))
 
 
 def to_packet(result):
