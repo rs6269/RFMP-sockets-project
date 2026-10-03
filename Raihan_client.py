@@ -1,5 +1,22 @@
 import socket
 import sys
+import os
+
+# Add relative path to 'server' folder so crypto.py can be found from anywhere
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "server")))
+
+# Import cryptographic functions from crypto file
+try:
+    from crypto import (
+        generate_rsa_keypair,
+        rsa_encrypt_session_key,
+        generate_aes_key,
+        aes_encrypt,
+        aes_decrypt,
+        build_encryption_packet as build_ec_packet
+    )
+except ImportError:
+    print("[-] Warning: crypto.py not found in working directory. Crypto functions disabled.")
 
 # ============================================
 # 1. PACKET BUILDERS
@@ -53,12 +70,6 @@ def build_start_packet(secured=False):
     #Constructs the protocol Start-Packet
     sec_flag = "1" if secured else "0"
     return f"(SS,RFMP,v1.0,{sec_flag})"
-
-
-def build_encryption_packet(algorithm, encrypted_session_key, username, client_pub_key):
-    
-    #Constructs the Encryption-Packet for secure communication sessions
-    return f"(EC,{algorithm},{encrypted_session_key},{username}:{client_pub_key})"
 
 
 def build_command_packet(cmd_mode, command_str):
@@ -198,20 +209,47 @@ def run_client_app():
         print("[-] Error: Connection refused on port 5000. Ensure server.py is running first!")
         return
 
-    # Handshake Initialization Phase: Check security requirements
+    # Handshake initialization phase: Check security requirements
     sec_choice = input("Enable Secure Communication? (0=No, 1=Yes) [0/1]: ").strip()
     is_secure = (sec_choice == "1")
+    session_aes_key = None  # Holds the active AES session key
     
-    # Build and send the mandatory Start-Packet (SS) to initiate protocol dialogue
+    # Build and send the mandatory start-packet (SS) to initiate protocol dialogue
     start_pkt = build_start_packet(secured=is_secure)
     resp = conn.send_and_receive(start_pkt)
-    success, _ = handle_server_response(resp)
+    success, parsed_start = handle_server_response(resp)
     
     # Terminate sequence if server rejects the start handshake
     if not success:
         print("[-] Handshake protocol rejected. Closing connection.")
         conn.close()
         return
+
+    # Perform RSA Key Exchange and send (EC) Packet if Secured
+    if is_secure:
+        server_pub_key_pem = parsed_start.get("server_pub_key")
+        
+        # 1. Generate local 16-byte random AES session key
+        session_aes_key = generate_aes_key()
+        
+        # 2. Encrypt AES key with server's RSA public key
+        encrypted_session_key_b64 = rsa_encrypt_session_key(session_aes_key, server_pub_key_pem)
+        
+        # 3. Generate client RSA keypair
+        client_pub_key_pem, client_priv_key_pem = generate_rsa_keypair()
+        username = "raihan_user"
+        
+        # 4. Build and send Encryption Packet (EC) via crypto.py
+        ec_pkt = build_ec_packet("AES", encrypted_session_key_b64, username, client_pub_key_pem)
+        ec_resp = conn.send_and_receive(ec_pkt)
+        ec_success, _ = handle_server_response(ec_resp)
+        
+        if not ec_success:
+            print("[-] Encryption setup handshake failed. Terminating session.")
+            conn.close()
+            return
+            
+        print("[+] Secure AES Key Exchange Completed Successfully!")
 
     # Continuous interactive menu loop for executing remote commands
     while True:
@@ -247,7 +285,16 @@ def run_client_app():
             filename = input("Enter remote filename to read: ").strip()
             pkt = build_command_packet("openRead", filename)
             resp = conn.send_and_receive(pkt)
-            handle_server_response(resp)
+            success, parsed_dp = handle_server_response(resp)
+            
+            # Decrypt received file payload using aes_decrypt if in secure mode
+            if success and is_secure and session_aes_key and parsed_dp.get("type") == "DP":
+                raw_cipher = parsed_dp.get("text", "")
+                try:
+                    decrypted_text = aes_decrypt(raw_cipher, session_aes_key)
+                    print(f"[+] Decrypted File Payload:\n{decrypted_text}\n")
+                except Exception as e:
+                    print(f"[-] AES Decryption Error: {e}")
 
         # Option 4: Write text data streams to remote files via openWrite mode
         elif choice == "4":
@@ -256,12 +303,15 @@ def run_client_app():
             resp = conn.send_and_receive(pkt)
             handle_server_response(resp)
             
-            # Transmit subsequent data packet(DP) containing the file text contents
             payload = input("Enter text data payload to save: ")
+            
+            # Encrypt file payload using aes_encrypt if operating in secure mode
+            if is_secure and session_aes_key:
+                payload = aes_encrypt(payload, session_aes_key)
             dp_pkt = build_data_packet(payload)
             resp_dp = conn.send_and_receive(dp_pkt)
             handle_server_response(resp_dp)
-
+        
         # Option 5: Explicit test utility triggering server-side exception handling (EE packet display)
         elif choice == "5":
             pkt = build_command_packet("prompt", "cd /nonexistent_folder_fail")
@@ -310,8 +360,8 @@ def test_client_functions_alone():
         print(f"  [FAIL] Test 2: Expected {exp2}, got {res2}")
 
     # Test 3: Encryption Packet
-    res3 = build_encryption_packet("AES", "key123", "alice", "pub456")
-    exp3 = "(EC,AES,key123,alice:pub456)"
+    res3 = build_ec_packet("AES", "key123", "alice", "pub456")
+    exp3 = "(EC,AES,key123,alice:cHViNDU2)"
     if res3 == exp3:
         print(f"  [PASS] Test 3 (Encryption):      {res3}")
         tests_passed += 1
