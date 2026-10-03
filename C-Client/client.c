@@ -20,6 +20,26 @@
 #define SERVER_PORT 5000
 #define BUFFER_SIZE 65536
 
+void send_packet(socket_t sock, const char *packet) {
+    char framed[BUFFER_SIZE];
+    snprintf(framed, sizeof(framed), "%s\n", packet);
+    send(sock, framed, (int)strlen(framed), 0);
+    printf("[TX]: %s\n", packet);
+}
+
+int recv_packet(socket_t sock, char *out, int max_len) {
+    int total = 0;
+    char ch;
+    while (total < max_len - 1) {
+        int n = (int)recv(sock, &ch, 1, 0);
+        if (n <= 0) return -1;
+        if (ch == '\n') break;
+        out[total++] = ch;
+    }
+    out[total] = '\0';
+    return total;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         printf("Usage: %s <filename>\n", argv[0]);
@@ -37,6 +57,8 @@ int main(int argc, char *argv[]) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
+    
+    // Windows compiler fix
     server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
 
     if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -45,7 +67,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    printf("Connected to server\n");
+    char buffer[BUFFER_SIZE];
+    
+    send_packet(sock, "(SS,RFMP,v1.0,0)");
+    recv_packet(sock, buffer, BUFFER_SIZE);
+    printf("[RX]: %s\n", buffer);
+
+    send_packet(sock, "(End)");
 
     CLOSESOCKET(sock);
 #ifdef _WIN32
