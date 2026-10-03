@@ -45,6 +45,7 @@ int main(int argc, char *argv[]) {
         printf("Usage: %s <filename>\n", argv[0]);
         return 1;
     }
+    const char *filename = argv[1];
 
 #ifdef _WIN32
     WSADATA wsaData;
@@ -58,7 +59,6 @@ int main(int argc, char *argv[]) {
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
     
-    // Windows compiler fix
     server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
 
     if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -72,6 +72,23 @@ int main(int argc, char *argv[]) {
     send_packet(sock, "(SS,RFMP,v1.0,0)");
     recv_packet(sock, buffer, BUFFER_SIZE);
     printf("[RX]: %s\n", buffer);
+    
+    char command_packet[BUFFER_SIZE];
+    snprintf(command_packet, sizeof(command_packet), "(CM, openRead, %s)", filename);
+    send_packet(sock, command_packet);
+    
+    if (recv_packet(sock, buffer, BUFFER_SIZE) > 0) {
+        if (strncmp(buffer, "(EE,", 4) == 0) {
+            printf("Error: %s\n", buffer);
+        } else if (strncmp(buffer, "(SC,", 4) == 0 || strncmp(buffer, "(DP,", 4) == 0) {
+            char *contents = buffer + 4;
+            size_t len = strlen(contents);
+            if (len > 0 && contents[len - 1] == ')') {
+                contents[len - 1] = '\0';
+            }
+            printf("File contents:\n%s\n", contents);
+        }
+    }
 
     send_packet(sock, "(End)");
 
