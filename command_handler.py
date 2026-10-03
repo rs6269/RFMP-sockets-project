@@ -4,6 +4,11 @@ It has no socket code - the server script will import this file and call these f
 command packet arrives from the client.
 This is basically a skeleton structure with the main functions
 """
+# Error code table (Maximum of 4 error codes):
+# E01: Issue when unknown or unsupported command is passed
+# E02: When unable to locate File or directory 
+# E03: When file or directory with that name already exists
+# E04: Any other command failure
 
 import os
 
