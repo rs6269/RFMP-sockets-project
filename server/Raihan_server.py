@@ -7,7 +7,7 @@ Run:  python Raihan_server.py        (needs: pip install pycryptodome)
 Error codes:  E01 unknown command   E02 not found   E03 already exists   E04 other failure
 """
 
-import socket                                   # Python's built-in TCP socket library for network communication
+import socket                                   
 import threading                                # lets us run one thread per client so many clients work at once
 
 import command_handler                          # our module that actually performs mkdir/rmdir/ren/read/write on disk
