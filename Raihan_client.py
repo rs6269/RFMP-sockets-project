@@ -256,7 +256,7 @@ def run_client_app():
         print("--------------------------------------------------")
         print("RFMP Client Main Menu:")
         print("  1. Folder Commands (mkdir, cd, rmdir, del, ren)")
-        print("  2. System Commands (dir, whoami, tasklist, etc.)")
+        print("  2. System Commands (dir, pwd, move, type, copy)")
         print("  3. openRead  (Retrieve remote file contents)")
         print("  4. openWrite (Write text payload to remote file)")
         print("  5. Test EE Exception Packet (Trigger server error response)")
@@ -275,7 +275,7 @@ def run_client_app():
 
         # Option 2: Execute general OS system prompt commands
         elif choice == "2":
-            sys_cmd = input("Enter system command (e.g., dir, whoami, systeminfo): ").strip()
+            sys_cmd = input("Enter system command (e.g.,dir, pwd, move, type, copy): ").strip()
             pkt = build_command_packet("prompt", sys_cmd)
             resp = conn.send_and_receive(pkt)
             handle_server_response(resp)
