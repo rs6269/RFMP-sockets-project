@@ -10,8 +10,8 @@ Error codes:  E01 unknown command   E02 not found   E03 already exists   E04 oth
 import socket                                   
 import threading                                # lets us run one thread per client so many clients work at once
 
-import command_handler                          # our module that actually performs mkdir/rmdir/ren/read/write on disk
-import crypto                                   # our module holding RSA, AES and Caesar encryption helpers
+import Raihan_command_handler as command_handler# our module that actually performs mkdir/rmdir/ren/read/write on disk
+import Raihan_crypto as crypto                  # our module holding RSA, AES and Caesar encryption helpers
 
 HOST = "127.0.0.1"                              # localhost: only clients on this same machine can connect
 PORT = 5000                                     # the TCP port the server listens on (client must use the same one)
