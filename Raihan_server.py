@@ -7,11 +7,12 @@ Run:  python Raihan_server.py        (needs: pip install pycryptodome)
 Error codes:  E01 unknown command   E02 not found   E03 already exists   E04 other failure
 """
 
-import socket                                   
+import os                                       # gives each client its starting folder through os.getcwd()
+import socket                                   # Python's TCP socket library
 import threading                                # lets us run one thread per client so many clients work at once
 
-import Raihan_command_handler as command_handler# our module that actually performs mkdir/rmdir/ren/read/write on disk
-import Raihan_crypto as crypto                  # our module holding RSA, AES and Caesar encryption helpers
+import Raihan_command_handler as command_handler    # our module that actually performs mkdir/rmdir/ren/read/write on disk
+import Raihan_crypto as crypto                      # our module holding RSA, AES and Caesar encryption helpers
 
 HOST = "127.0.0.1"                              # localhost: only clients on this same machine can connect
 PORT = 5000                                     # the TCP port the server listens on (client must use the same one)
@@ -21,7 +22,6 @@ BUFFER = 1024 * 1024                            # max bytes read per recv() call
 def send(conn, packet):
     """Send one packet (a string) to the client."""
     print("TX ->", packet[:80])                 # log the outgoing packet, trimmed to 80 chars so big files don't flood the console
-    # Add a newline so the C client knows the packet is finished
     conn.sendall((packet + "\n").encode("utf-8"))   # append the newline delimiter, convert to bytes, and send everything
 
 
@@ -66,8 +66,7 @@ def setup_phase(conn):
         send(conn, "(CC)")                      # send a plain Confirm-Connection packet, no key needed
         return None, None                       # no algorithm and no key (this is a tuple, so setup still counts as success)
 
-    # Secured: make an RSA keypair and send the public key to the client
-    public_pem, private_pem = crypto.generate_rsa_keypair() # create a fresh RSA pair just for this client
+    public_pem, private_pem = crypto.generate_rsa_keypair() # Secured: create a fresh RSA pair just for this client
     send(conn, f"(CC,{public_pem})")            # confirm the connection and hand over the public key (private stays secret)
 
     packet = conn.recv(BUFFER).decode("utf-8").strip()      # wait for the Encryption-Packet containing the client's session key
@@ -93,6 +92,7 @@ def handle_client(conn, addr):
     """Runs in its own thread, one per client."""
     print("Connected:", addr)                   # log the client's IP and port
     write_file = None                           # file handle after an openWrite (None = no file currently open)
+    cwd = os.getcwd()                           # THIS client's own current folder, separate from every other client
 
     try:
         setup = setup_phase(conn)               # run the handshake (secure or unsecured)
@@ -129,17 +129,18 @@ def handle_client(conn, addr):
                     command = command.lower()   # make the command name case-insensitive
                     if command == "rd":         # "rd" is the short Windows alias for rmdir
                         command = "rmdir"       # map it to the real command name
-                    send(conn, to_packet(command_handler.execute_prompt_command(command, rest.strip())))  # run the command, convert result to a packet, send it
+                    result, cwd = command_handler.execute_prompt_command(command, rest.strip(), cwd)  # run the command, get back the result AND this client's updated folder (only changes after a successful cd)
+                    send(conn, to_packet(result))   # convert the result to a packet and send it
 
                 elif mode == "openread":        # send the file back in a Data Packet
-                    result = command_handler.open_read(args)    # read the file whose path is in args
+                    result = command_handler.open_read(args, cwd)    # read the file whose path is in args, relative to this client's own folder
                     if result[0] == "SC":       # file was read successfully
                         send(conn, f"(DP,{encrypt(result[1], alg, key)})")  # send contents (encrypted if secured) inside a Data Packet
                     else:                       # file missing or unreadable
                         send(conn, to_packet(result))   # send the error packet instead
 
                 elif mode == "openwrite":       # keep the file open for the Data Packets that follow
-                    result = command_handler.open_write(args)   # open (or create) the file for writing
+                    result = command_handler.open_write(args, cwd)   # open (or create) the file for writing, relative to this client's own folder
                     if result[0] == "SC":       # file opened fine
                         write_file = result[1]  # store the handle so later DP packets can write into it
                         send(conn, f"(SC,Ready to receive data for '{args}')")  # tell the client it may start sending data
