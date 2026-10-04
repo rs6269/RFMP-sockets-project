@@ -9,6 +9,7 @@ This is basically a skeleton structure with the main functions
 # E02: When unable to locate File or directory 
 # E03: When file or directory with that name already exists
 # E04: Any other command failure
+
 import os
 
 
