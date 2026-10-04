@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "s
 
 # Import cryptographic functions from crypto file
 try:
-    from crypto import (
+    from server.Raihan_crypto import (
         generate_rsa_keypair,
         rsa_encrypt_session_key,
         generate_aes_key,
