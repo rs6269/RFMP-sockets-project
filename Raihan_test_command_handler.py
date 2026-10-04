@@ -1,46 +1,49 @@
 """
-This is a standalone test script for the command_handler.py.
-It will run each command with sample inputs and prints the result,
-so the functions can be checked without needing sockets or a server.
-Also tested command names which didnt exist, to check if the else: branch was correctly executed.
+Standalone test script for Raihan_command_handler.py.
+Runs each command with sample inputs and prints the result, so the functions
+can be checked without needing sockets or a server.
+cwd is just a text path that is passed in and handed back, like the server does for each client.
 """
 
-from command_handler import (
+import os  # needed to find the starting folder and to clean up the test file at the end
+from Raihan_command_handler import (
     execute_prompt_command, open_read, open_write, write_data, close_file,
-)  # bring in the functions from command_handler.py so they can be tested here
+)  # bring in the functions from Raihan_command_handler.py so they can be tested here
+
+cwd = os.getcwd()  # start in the current folder, like a new client would
 
 print("=== mkdir / cd / dir / pwd ===")  # just a label printed to separate this group of tests
-print(execute_prompt_command("mkdir", "testfolder"))  # should create a folder called testfolder
-print(execute_prompt_command("cd", "testfolder"))  # should move into that folder
-print(execute_prompt_command("pwd", ""))  # should show the current folder path
-print(execute_prompt_command("dir", ""))  # should list what's inside the current folder
+result, cwd = execute_prompt_command("mkdir", "testfolder", cwd); print(result)  # should create testfolder
+result, cwd = execute_prompt_command("cd", "testfolder", cwd); print(result)     # should move this "client" into it
+result, cwd = execute_prompt_command("pwd", "", cwd); print(result)              # should show the new folder
+result, cwd = execute_prompt_command("dir", "", cwd); print(result)              # should list what's inside
 
 print("\n=== ren / copy / move ===")  # label for the next group of tests
-open("sample.txt", "w").close()  # create an empty file to test ren/copy/move on
-print(execute_prompt_command("ren", "sample.txt renamed.txt"))  # should rename sample.txt
-print(execute_prompt_command("copy", "renamed.txt copy_of_renamed.txt"))  # should copy the renamed file
-print(execute_prompt_command("move", "copy_of_renamed.txt moved.txt"))  # should move/rename the copy
+open(os.path.join(cwd, "sample.txt"), "w").close()  # create the empty file INSIDE testfolder (cwd), not the process folder
+result, cwd = execute_prompt_command("ren", "sample.txt renamed.txt", cwd); print(result)  # should rename sample.txt
+result, cwd = execute_prompt_command("copy", "renamed.txt copy_of_renamed.txt", cwd); print(result)  # should copy the renamed file
+result, cwd = execute_prompt_command("move", "copy_of_renamed.txt moved.txt", cwd); print(result)  # should move/rename the copy
 
 print("\n=== del / rmdir ===")  # label for the next group of tests
-print(execute_prompt_command("del", "renamed.txt"))  # should delete renamed.txt
-print(execute_prompt_command("del", "moved.txt"))  # should delete moved.txt
-print(execute_prompt_command("cd", ".."))  # move back up one folder before removing testfolder
-print(execute_prompt_command("rmdir", "testfolder"))  # should delete the now-empty testfolder
+result, cwd = execute_prompt_command("del", "renamed.txt", cwd); print(result)  # should delete renamed.txt
+result, cwd = execute_prompt_command("del", "moved.txt", cwd); print(result)    # should delete moved.txt
+result, cwd = execute_prompt_command("cd", "..", cwd); print(result)             # go back up before removing testfolder
+result, cwd = execute_prompt_command("rmdir", "testfolder", cwd); print(result)  # should delete the now-empty testfolder
 
 print("\n=== error cases (should return EE) ===")  # label for the error tests
-print(execute_prompt_command("rmdir", "doesNotExist"))  # folder doesn't exist, should return E02
-print(execute_prompt_command("mkdir", "."))  # "." already exists, should return E03
-print(execute_prompt_command("blah", "something"))  # not a real command, should return E01
-print(execute_prompt_command("ren", "onlyonename"))  # missing the second name, should return E04
+result, cwd = execute_prompt_command("rmdir", "doesNotExist", cwd); print(result)  # folder doesn't exist, should return E02
+result, cwd = execute_prompt_command("mkdir", ".", cwd); print(result)             # "." already exists, should return E03
+result, cwd = execute_prompt_command("blah", "something", cwd); print(result)      # not a real command, should return E01
+result, cwd = execute_prompt_command("ren", "onlyonename", cwd); print(result)     # missing the second name, should return E04
 
 print("\n=== openRead / openWrite / write_data / close_file ===")  # label for the file-handling tests
-print(open_read("does_not_exist.txt"))  # file doesn't exist, should return E02
-status, handle = open_write("demo.txt")  # open a new file for writing, get back status and the file handle
+print(open_read("does_not_exist.txt", cwd))  # file doesn't exist, should return E02
+status, handle = open_write("demo.txt", cwd)  # open a new file for writing, get back status and the file handle
 if status == "SC":  # only continue if the file actually opened successfully
     print(write_data(handle, "Hello from the DP packet simulation\n"))  # write some text into it
     print(close_file(handle))  # close the file once done writing
-print(open_read("demo.txt"))  # read it back to confirm the text was actually saved
+print(open_read("demo.txt", cwd))  # read it back to confirm the text was actually saved
 
-import os  # needed here just for the cleanup step below
-if os.path.exists("demo.txt"):  # check if the test file still exists
-    os.remove("demo.txt")  # delete it so repeated test runs start clean
+demo_path = os.path.join(cwd, "demo.txt")  # build the full path to the test file, so cleanup looks in the right folder
+if os.path.exists(demo_path):  # check if the test file still exists
+    os.remove(demo_path)  # delete it so repeated test runs start clean
