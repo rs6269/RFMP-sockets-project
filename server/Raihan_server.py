@@ -2,7 +2,7 @@
 server.py - Multithreaded RFMP (Remote File Management Protocol) server
 
 Uses crypto.py (RSA / AES / Caesar) and command_handler.py (folder/file commands).
-Run:  python server.py        (needs: pip install pycryptodome)
+Run:  python Raihan_server.py        (needs: pip install pycryptodome)
 
 Error codes:  E01 unknown command   E02 not found   E03 already exists   E04 other failure
 """
