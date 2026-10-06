@@ -1,6 +1,7 @@
 import socket
 import sys
 import os
+import secrets  # used to pick a random Caesar shift key
 
 # Add relative path to 'server' folder so crypto.py can be found from anywhere
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "server")))
@@ -13,6 +14,8 @@ try:
         generate_aes_key,
         aes_encrypt,
         aes_decrypt,
+        caesar_encrypt,
+        caesar_decrypt,
         build_encryption_packet as build_ec_packet
     )
 except ImportError:
@@ -59,7 +62,8 @@ def parse_packet(packet_str):
         
     elif p_type == "DP":
         # Data packet: (DP, payload_text)
-        text = ",".join(parts[1:]) if len(parts) > 1 else ""
+        # split only once so commas and spaces inside the data stay exactly as sent
+        text = cleaned.split(",", 1)[1] if "," in cleaned else ""
         return {"type": "DP", "text": text}
     
     return {"type": p_type, "raw_parts": parts}
@@ -184,6 +188,24 @@ class ServerSocketConnection:
         except Exception:
             pass
 
+def encrypt_payload(text, algorithm, key):
+    #Encrypts file text with whichever algorithm was chosen for this session
+    if algorithm == "AES":
+        return aes_encrypt(text, key)
+    if algorithm == "CAESAR":
+        return caesar_encrypt(text, key)
+    return text
+
+
+def decrypt_payload(text, algorithm, key):
+    #Decrypts file text with whichever algorithm was chosen for this session
+    if algorithm == "AES":
+        return aes_decrypt(text, key)
+    if algorithm == "CAESAR":
+        return caesar_decrypt(text, key)
+    return text
+
+
 # ========================================================
 # SECTION 4: CLIENT INTERACTIVE MENU & UI LOGIC
 # ========================================================
@@ -212,7 +234,8 @@ def run_client_app():
     # Handshake initialization phase: Check security requirements
     sec_choice = input("Enable Secure Communication? (0=No, 1=Yes) [0/1]: ").strip()
     is_secure = (sec_choice == "1")
-    session_aes_key = None  # Holds the active AES session key
+    algorithm = None   # "AES" or "CAESAR" (only set when the session is secured)
+    session_key = None # Holds the active session key (16 bytes for AES, a number for Caesar)
     
     # Build and send the mandatory start-packet (SS) to initiate protocol dialogue
     start_pkt = build_start_packet(secured=is_secure)
@@ -229,18 +252,26 @@ def run_client_app():
     if is_secure:
         server_pub_key_pem = parsed_start.get("server_pub_key")
         
-        # 1. Generate local 16-byte random AES session key
-        session_aes_key = generate_aes_key()
+        # 1. Let the user choose the algorithm, then generate the session key for it
+        alg_choice = input("Choose algorithm (1=AES, 2=Caesar) [1/2]: ").strip()
+        if alg_choice == "2":
+            algorithm = "CAESAR"
+            session_key = secrets.randbelow(25) + 1          # random Caesar shift from 1 to 25
+            key_bytes = str(session_key).encode("utf-8")     # the shift is sent as text, the server converts it back to a number
+        else:
+            algorithm = "AES"
+            session_key = generate_aes_key()                 # random 16-byte AES key
+            key_bytes = session_key
         
-        # 2. Encrypt AES key with server's RSA public key
-        encrypted_session_key_b64 = rsa_encrypt_session_key(session_aes_key, server_pub_key_pem)
+        # 2. Encrypt the session key with server's RSA public key
+        encrypted_session_key_b64 = rsa_encrypt_session_key(key_bytes, server_pub_key_pem)
         
         # 3. Generate client RSA keypair
         client_pub_key_pem, client_priv_key_pem = generate_rsa_keypair()
         username = "raihan_user"
         
         # 4. Build and send Encryption Packet (EC) via crypto.py
-        ec_pkt = build_ec_packet("AES", encrypted_session_key_b64, username, client_pub_key_pem)
+        ec_pkt = build_ec_packet(algorithm, encrypted_session_key_b64, username, client_pub_key_pem)
         ec_resp = conn.send_and_receive(ec_pkt)
         ec_success, _ = handle_server_response(ec_resp)
         
@@ -249,7 +280,7 @@ def run_client_app():
             conn.close()
             return
             
-        print("[+] Secure AES Key Exchange Completed Successfully!")
+        print(f"[+] Secure {algorithm} Key Exchange Completed Successfully!")
 
     # Continuous interactive menu loop for executing remote commands
     while True:
@@ -287,14 +318,14 @@ def run_client_app():
             resp = conn.send_and_receive(pkt)
             success, parsed_dp = handle_server_response(resp)
             
-            # Decrypt received file payload using aes_decrypt if in secure mode
-            if success and is_secure and session_aes_key and parsed_dp.get("type") == "DP":
+            # Decrypt received file payload (AES or Caesar) if in secure mode
+            if success and is_secure and session_key is not None and parsed_dp.get("type") == "DP":
                 raw_cipher = parsed_dp.get("text", "")
                 try:
-                    decrypted_text = aes_decrypt(raw_cipher, session_aes_key)
+                    decrypted_text = decrypt_payload(raw_cipher, algorithm, session_key)
                     print(f"[+] Decrypted File Payload:\n{decrypted_text}\n")
                 except Exception as e:
-                    print(f"[-] AES Decryption Error: {e}")
+                    print(f"[-] {algorithm} Decryption Error: {e}")
 
         # Option 4: Write text data streams to remote files via openWrite mode
         elif choice == "4":
@@ -305,9 +336,9 @@ def run_client_app():
             
             payload = input("Enter text data payload to save: ")
             
-            # Encrypt file payload using aes_encrypt if operating in secure mode
-            if is_secure and session_aes_key:
-                payload = aes_encrypt(payload, session_aes_key)
+            # Encrypt file payload (AES or Caesar) if operating in secure mode
+            if is_secure and session_key is not None:
+                payload = encrypt_payload(payload, algorithm, session_key)
             dp_pkt = build_data_packet(payload)
             resp_dp = conn.send_and_receive(dp_pkt)
             handle_server_response(resp_dp)
